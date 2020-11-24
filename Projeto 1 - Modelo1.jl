@@ -108,9 +108,9 @@ function ResolveModelo1(Distancias, Demanda, Adjacencias, W, nIJ, nT, nP, TLimit
     
     model = Model(optimizer_with_attributes(Gurobi.Optimizer, "TimeLimit" => TLimit))
     @variable(model, x[i=1:nIJ, j=1:nIJ, t=1:nT, p=1:nP] ≥ 0, Int) #Int
-    @variable(model, xt[i=1:nIJ, j=1:nIJ, p=1:nP] ≥ 0)
+    #@variable(model, xt[i=1:nIJ, j=1:nIJ, p=1:nP] ≥ 0)
     @variable(model, l[i=1:nIJ, j=1:nIJ, t=1:nT, p=1:nP] ≥ 0, Bin) #Bin
-    @variable(model, lt[i=1:nIJ, j=1:nIJ, p=1:nP] ≥ 0)
+    #@variable(model, lt[i=1:nIJ, j=1:nIJ, p=1:nP] ≥ 0)
     @variable(model, f[i=1:nIJ, j=1:nIJ, p=1:nP] ≥ 0) # Incluir t?
     
     num_var_total = length(all_variables(model))
@@ -119,14 +119,14 @@ function ResolveModelo1(Distancias, Demanda, Adjacencias, W, nIJ, nT, nP, TLimit
     @constraint(model, fluxo[i=1:nIJ,p=1:nP],
                 sum(x[i,j,t,p] for j=1:nIJ, t=1:nT) == 
                 sum(x[j,i,t,p] for j=1:nIJ, t=1:nT))
-    @constraint(model, temp_x[i=1:nIJ,j=1:nIJ,p=1:nP], 
-                sum(x[i,j,t,p] for t=1:nT) == xt[i,j,p])
+    #@constraint(model, temp_x[i=1:nIJ,j=1:nIJ,p=1:nP], 
+    #            sum(x[i,j,t,p] for t=1:nT) == xt[i,j,p])
     @constraint(model, temp_x2[t=1:nT,p=1:nP], 
                 sum(x[i,j,t,p] for i=1:nIJ, j=1:nIJ) <=1)
     @constraint(model, arc_atend[i=1:nIJ,j=1:nIJ],
                 sum(l[i,j,t,p] + l[j,i,t,p] for p=1:nP, t=1:nT) == adja[i,j])
-    @constraint(model, temp_l[i=1:nIJ, j=1:nIJ, p=1:nP], 
-                sum(l[i,j,t,p] for t=1:nT) == lt[i,j,p])
+    #@constraint(model, temp_l[i=1:nIJ, j=1:nIJ, p=1:nP], 
+    #            sum(l[i,j,t,p] for t=1:nT) == lt[i,j,p])
     @constraint(model, pass_demanda[i=1:nIJ,j=1:nIJ, p=1:nP],
                 sum(x[i,j,t,p] for t=1:nT) >=
                 sum(l[i,j,t,p] for t=1:nT))
@@ -134,20 +134,20 @@ function ResolveModelo1(Distancias, Demanda, Adjacencias, W, nIJ, nT, nP, TLimit
                 sum(l[i,j,t,p]*q[i,j] for i=1:nIJ,j=1:nIJ,t=1:nT) <= W)
     @constraint(model, contr_fluxo[i=2:nIJ,p=1:nP],
                 sum(f[i,k,p] for k=1:nIJ) - sum(f[k,i,p] for k=1:nIJ) == 
-                sum(lt[i,j,p] for j=1:nIJ))
+                sum(l[i,j,t,p] for j=1:nIJ, t = 1:nT))
     @constraint(model, contr_fluxo2[i=1:nIJ, j=1:nIJ ,p=1:nP],
-                f[i,j,p] <= nIJ^2*xt[i,j,p]);
+                f[i,j,p] <= nIJ^2*sum(x[i,j,t,p] for t = 1:nT));
     optimize!(model)
 
     if termination_status(model) == MOI.OPTIMAL
-        SolOt = round.(Int, value.(xt))
+        SolOt = round.(Int, value.(x))
         SolStatus = "ótima"
         ObjOt = objective_value(model)
         SimplexIter = simplex_iterations(model)
         Gap = relative_gap(model)
         SolTime = solve_time(model)
     elseif termination_status(model) == MOI.TIME_LIMIT && has_values(model)
-        SolOt = round.(Int, value.(xt))
+        SolOt = round.(Int, value.(x))
         SolStatus = "Limitada pelo tempo"
         ObjOt = objective_value(model)
         SimplexIter = simplex_iterations(model)
@@ -204,14 +204,14 @@ function ResolveModelo2(Distancias, Demanda, Adjacencias, W, nIJ, nT, nP, TLimit
     optimize!(model)
 
     if termination_status(model) == MOI.OPTIMAL
-        SolOt = round.(Int, value.(xt))
+        SolOt = round.(Int, value.(x))
         SolStatus = "ótima"
         ObjOt = objective_value(model)
         SimplexIter = simplex_iterations(model)
         Gap = relative_gap(model)
         SolTime = solve_time(model)
     elseif termination_status(model) == MOI.TIME_LIMIT && has_values(model)
-        SolOt = round.(Int, value.(xt))
+        SolOt = round.(Int, value.(x))
         SolStatus = "Limitada pelo tempo"
         ObjOt = objective_value(model)
         SimplexIter = simplex_iterations(model)
@@ -229,8 +229,8 @@ function plotResult(x, Coord, nIJ, nP)
     Colors = [:red, :blue, :green, :yellow, :magenta]
     pl2=plot()
     for p=1:nP
-        for i = 1:nIJ, j = 1:nIJ
-            if (x[i,j,p] > 0)
+        for i = 1:nIJ, j = 1:nIJ, t = 1:nT
+            if (x[i,j,t,p] > 0)
                 pl2=plot!([Coord[i,1]+0.2*p, Coord[j,1]+0.2*p], 
                           [Coord[i,2]+0.2*p, Coord[j,2]+0.2*p], 
                           ls =:dash, c=Colors[p], lw = 2, lab="")
